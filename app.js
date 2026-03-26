@@ -1,4 +1,5 @@
-if (process.env.NODE_ENV != "production") {
+
+if (process.env.NODE_ENV !== "production") {
     require("dotenv").config();
 }
 
@@ -28,32 +29,32 @@ app.engine("ejs", ejsMate);
 
 // -------------------- DATABASE --------------------
 const mongoose = require("mongoose");
-const dbUrl = process.env.ATLASDB_URL;
+const dbUrl = process.env.ATLASDB_URL || "mongodb://127.0.0.1:27017/test";
 
 async function main() {
     await mongoose.connect(dbUrl);
 }
 
 main()
-    .then(() => console.log("connected to DB"))
-    .catch((err) => console.log(err));
+    .then(() => console.log("✅ connected to DB"))
+    .catch((err) => console.error("❌ DB CONNECTION ERROR:", err));
 
-// -------------------- SESSION STORE --------------------
+// -------------------- SESSION --------------------
 const store = MongoStore.create({
     mongoUrl: dbUrl,
     crypto: {
-        secret: process.env.SECRET,
+        secret: process.env.SECRET || "mysupersecret",
     },
     touchAfter: 24 * 3600,
 });
 
 store.on("error", (err) => {
-    console.log("ERROR in MONGO SESSION STORE", err);
+    console.log("❌ SESSION STORE ERROR:", err);
 });
 
 const sessionOptions = {
     store,
-    secret: process.env.SECRET,
+    secret: process.env.SECRET || "mysupersecret",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -83,14 +84,16 @@ app.use((req, res, next) => {
 
 // -------------------- ROUTES --------------------
 app.use("/listings", listingRouter);
+
+// IMPORTANT: review router must use mergeParams: true
 app.use("/listings/:id/reviews", reviewRouter);
 
-// ✅ ROOT REDIRECT (IMPORTANT)
+app.use("/", userRouter);
+
+// ✅ ROOT REDIRECT (AFTER userRouter to avoid conflicts)
 app.get("/", (req, res) => {
     res.redirect("/listings");
 });
-
-app.use("/", userRouter);
 
 // -------------------- ERROR HANDLING --------------------
 app.all("*", (req, res, next) => {
@@ -98,10 +101,13 @@ app.all("*", (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
+    console.error("❌ ERROR:", err); // DEBUG LOG
+
     if (res.headersSent) {
         return next(err);
     }
-    let { statusCode = 500, message = "something went wrong" } = err;
+
+    let { statusCode = 500, message = "Something went wrong" } = err;
     res.status(statusCode).render("error.ejs", { message });
 });
 
@@ -109,5 +115,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
-    console.log(`server is listening on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
