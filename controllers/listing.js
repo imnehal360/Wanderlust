@@ -9,6 +9,28 @@ module.exports.index = async (req, res) => {
     res.render("listings/index.ejs", { allListings });
 };
 
+module.exports.searchListings = async (req, res) => {
+    let { q } = req.query;
+    if (!q) {
+        return res.redirect("/listings");
+    }
+    
+    // Search by location or country (place-based search)
+    const allListings = await Listing.find({
+        $or: [
+            { location: { $regex: q, $options: "i" } },
+            { country: { $regex: q, $options: "i" } }
+        ]
+    });
+    
+    if (allListings.length === 0) {
+        req.flash("error", "No destinations found for your search.");
+        return res.redirect("/listings");
+    }
+    
+    res.render("listings/index.ejs", { allListings });
+};
+
 module.exports.renderNewForm = (req, res) => {
     res.render("listings/new.ejs");
 };
@@ -62,19 +84,21 @@ module.exports.editListing = async (req, res) => {
 
 module.exports.updateListing = async (req, res) => {
     let { id } = req.params;
-    // req.body.listing.image = {
-    //     filename: "listingimage",
-    //     url:
-    //         req.body.listing.image ||
-    //         "https://images.unsplash.com/photo-1518684079-3c830dcef090?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8ZHViYWl8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=800&q=60",
-    // };
-    let listing=await Listing.findByIdAndUpdate(id, { ...req.body.listing });
+    let listing = await Listing.findByIdAndUpdate(id, { ...req.body.listing });
+
+    let response = await geocodingClient.forwardGeocode({
+        query: req.body.listing.location,
+        limit: 1,
+    }).send();
+    listing.geometry = response.body.features[0].geometry;
+
     if(typeof req.file !== "undefined"){
-    let url=req.file.path;
-    let filename=req.file.filename;
-    listing.image={url,filename};
-    await listing.save();
+        let url=req.file.path;
+        let filename=req.file.filename;
+        listing.image={url,filename};
     }
+    
+    await listing.save();
     req.flash("success", "Listing Updated!");
     res.redirect(`/listings/${id}`);
 };
